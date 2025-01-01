@@ -1,0 +1,14 @@
+langchain_groq
+langchain_core 
+langgraph 
+langchain_community
+IPython
+python-dotenv
+streamlit
+langchain_postgres
+psycopg
+uuid
+langgraph-checkpoint-postgres
+psycopg[binary,pool]
+psycopg2-binary 
+sqlalchemy
