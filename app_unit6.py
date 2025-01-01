@@ -30,7 +30,7 @@ llm = ChatGroq(
 )
 
 
-DB_URI = "postgresql://postgres:Chandranshu@localhost:5432/Chatbot_history?sslmode=disable"
+DB_URI = os.getenv("DB_URI")
 connection_kwargs = {
     "autocommit": True,
     "prepare_threshold": 0,
@@ -237,7 +237,7 @@ graph = builder.compile(checkpointer=checkpointer)
 
 
 # Connect to PostgreSQL
-DATABASE_URL = "postgresql://postgres:Chandranshu@localhost:5432/Chatbot_login_details"
+DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 session = Session()
