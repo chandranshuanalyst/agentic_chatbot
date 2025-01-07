@@ -39,16 +39,8 @@ connection_kwargs = {
 conn=Connection.connect(DB_URI, **connection_kwargs)
 checkpointer = PostgresSaver(conn)
 
-def setup_once():
-    # Check if the FIRST_RUN environment variable is set
-    if os.getenv("FIRST_RUN", "True") == "True":
-        # Run your setup logic here (only once)
-        checkpointer.setup()
+checkpointer.setup()
 
-        # After running the setup, set the environment variable to False to prevent re-running
-        os.environ["FIRST_RUN"] = "False"
-
-setup_once()  # Call this during app startup
 
 # Create the table schema (only needs to be done once)
 table_name = "Chatbot_history"
@@ -271,3 +263,5 @@ def chat_endpoint(request: RequestState):
 
     # Return the result as the response
     return result
+
+conn.close()
