@@ -1,7 +1,6 @@
-import psycopg2
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-import hashlib
+# Import necessary modules and setup for FastAPI, LangGraph, and LangChain
+from fastapi import FastAPI  # FastAPI framework for creating the web application
+from pydantic import BaseModel  # BaseModel for structured data data models
 from IPython.display import Image, display
 from langgraph.graph import START, END, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
@@ -18,7 +17,7 @@ from langchain_community.tools import TavilySearchResults
 import os
 from dotenv import load_dotenv
 from typing_extensions import TypedDict
-import streamlit as st
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables (Make sure to set up your GROQ_API_KEY)
 load_dotenv()
@@ -30,7 +29,7 @@ llm = ChatGroq(
 )
 
 
-DB_URI = os.getenv("DB_URI")
+DB_URI = os.getenv('DB_URI')
 connection_kwargs = {
     "autocommit": True,
     "prepare_threshold": 0,
@@ -42,9 +41,6 @@ checkpointer = PostgresSaver(conn)
 
 # Create the table schema (only needs to be done once)
 table_name = "Chatbot_history"
-
-
-
 
 class State(TypedDict):
     question: Annotated[list,add_messages]
@@ -224,7 +220,7 @@ builder.add_node("delete_msg",delete_msg)
 # Flow
 builder.add_conditional_edges(START,should_search)
 builder.add_edge("chatbot_with_nocontext", "history_conversation")
-builder.add_edge("web_search","chatbot_with_tools")
+builder.add_edge("web_search","chatbot_with_tools") 
 builder.add_edge("chatbot_with_tools", "history_conversation")
 builder.add_conditional_edges("history_conversation",should_delete)
 
@@ -233,105 +229,35 @@ memory = MemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 
 # Create a thread
-#config = {"configurable": {"thread_id": "4"}}
+config = {"configurable": {"thread_id": "5"}}
+
+# FastAPI application setup with a title
+app = FastAPI(title='AI Agentic Chatbot')
 
 
-# Connect to PostgreSQL
-DATABASE_URL = os.getenv("DATABASE_URL")
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine)
-session = Session()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:8501"],  # Allow Streamlit to connect
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Password hashing function (to store and compare hashed passwords)
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
 
-# Function to authenticate user
-def authenticate_user(email, password):
-    user = session.execute(f"SELECT * FROM users WHERE email = '{email}'").fetchone()
-    if user and user[2] == hash_password(password):
-        return True
-    return False
+# Define the request schema using Pydantic's BaseModel
+class RequestState(BaseModel):
+    user_question: str  # List of messages in the chat
 
-# Function to save chat history to PostgreSQL
-def save_chat_history(user_id, message, response):
-    session.execute(f"INSERT INTO chat_history (user_id, message, response) VALUES ({user_id}, '{message}', '{response}')")
-    session.commit()
-
-# Function to retrieve chat history
-def get_chat_history(user_id):
-    history = session.execute(f"SELECT message, response FROM chat_history WHERE user_id = {user_id} ORDER BY timestamp").fetchall()
-    return history
-
-# Handle user session
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-
-# Streamlit login page
-if not st.session_state.logged_in:
-    st.title("Login to Chatbot")
-
-    # User login form
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-
-    # Check login credentials
-    if st.button("Login"):
-        if authenticate_user(email, password):
-            st.session_state.logged_in = True
-            st.session_state.email = email
-            user = session.execute(f"SELECT * FROM users WHERE email = '{email}'").fetchone()
-            st.session_state.user_id = user[0]  # Store user ID for chat history
-            st.success(f"Welcome, {email}!")
-        else:
-            st.error("Invalid credentials. Please try again.")
-
-# Once logged in, display the chatbot
-if st.session_state.logged_in:
-    # Streamlit app UI
-    config = {"configurable": {"thread_id": st.session_state.email}}
-    st.set_page_config(page_title="AI Chatbot", page_icon="🤖")
-
-    st.title("AI Chatbot")
-    st.subtitle(f"Welcome {st.session_state.email} to the Chatbot!")
-
-    st.write("Ask the AI a question and get an answer!")
+# Define an endpoint for handling chat requests
+@app.post("/chat/")
+def chat_endpoint(request: RequestState):
+    """
+    API endpoint to interact with the chatbot using LangGraph and tools.
+    Dynamically selects the model specified in the request.
+    """
     
-    # Retrieve chat history
-    chat_history = get_chat_history(st.session_state.user_id)
+    checkpointer = PostgresSaver(conn)
+    result = graph.invoke({"question": [HumanMessage(content=request.user_question)]}, config)
 
-    # Display the previous chat history
-    for chat in chat_history:
-        st.write(f"User: {chat[0]}")
-        st.write(f"Bot: {chat[1]}")
-    
-    # User input for the question
-    user_question = st.chat_input("Enter your question:")
-
-    if 'messages' not in st.session_state:
-        st.session_state.messages = [{'role': 'assistant', "content": 'Hello! Ask me anything.'}]
-        checkpointer.setup()
-
-
-    # When the user submits the question
-    #if st.button("Get Answer"):
-    if user_question:
-        st.session_state.messages.append({'role': 'user', "content": user_question})
-        # Run the graph to process the input and get the answer
-        result = graph.invoke({"question": [HumanMessage(content=user_question)]}, config)
-        print(result)
-        st.session_state.messages.append({'role': 'assistant', "content": result['answer'][-1].content})
-        # Display the answer
-        
-        #st.write(f"**Answer:** {result['answer'].content}")
-            
-    else:
-        st.warning("Please enter a question.")
-        
-        
-    for message in st.session_state.messages:
-        with st.chat_message(message['role']):
-            st.write(message['content'])
-        
-    # Save chat history in the database
-    save_chat_history(st.session_state.user_id, user_message, bot_response)
+    # Return the result as the response
+    return result
