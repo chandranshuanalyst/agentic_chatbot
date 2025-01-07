@@ -237,12 +237,11 @@ app = FastAPI(title='AI Agentic Chatbot')
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:8501"],  # Allow Streamlit to connect
+    allow_origins=["*"],  # Allow all origins (not restricted to specific domain or port)
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
 )
-
 
 # Define the request schema using Pydantic's BaseModel
 class RequestState(BaseModel):
