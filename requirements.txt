@@ -12,3 +12,6 @@ langgraph-checkpoint-postgres
 psycopg[binary,pool]
 psycopg2-binary 
 sqlalchemy
+fastapi
+pydantic
+uvicorn
